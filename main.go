@@ -7,7 +7,9 @@ import "net/http"
 import "strings"
 import "sync"
 import "time"
+import "flag"
 
+// Value ...
 type Value struct {
 	value   string
 	elapsed time.Time
@@ -31,13 +33,19 @@ func worker(tasks <-chan Task) {
 var tasks chan Task
 
 func main() {
-	tasks = make(chan Task, 100)
-	for i := 0; i < 4; i++ {
+	taskQty := *flag.Int("task", 100, "max task for database changes")
+	workersQty := *flag.Int("worker", 4, "max workers for database changes")
+	HTTPport := *flag.Int("http", 8080, "port for http")
+	TCPport := *flag.Int("tcp", 5000, "port for tcp")
+	// livingTime := *flag.Int("time", 5, "living time for keys in second")
+	flag.Parse()
+	tasks = make(chan Task, taskQty)
+	for i := 0; i < workersQty; i++ {
 		go worker(tasks)
 	}
-	go listenTCP()
+	go listenTCP(TCPport)
 	http.HandleFunc("/", handlerHTTP)
-	http.ListenAndServe(":8080", nil)
+	http.ListenAndServe(fmt.Sprintf(":%d", HTTPport), nil)
 }
 
 func handlerHTTP(w http.ResponseWriter, r *http.Request) {
@@ -50,8 +58,8 @@ func handlerHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("}\n"))
 }
 
-func listenTCP() {
-	listener, _ := net.Listen("tcp", ":5000")
+func listenTCP(port int) {
+	listener, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
 	for {
 		conn, err := listener.Accept()
