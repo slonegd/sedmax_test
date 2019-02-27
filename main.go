@@ -6,26 +6,33 @@ import "net"
 import "net/http"
 import "strings"
 import "sync"
+import "time"
 
-var database = make(map[string]string)
+type Value struct {
+	value   string
+	elapsed time.Time
+}
+
+var database = make(map[string]Value)
 var dbMtx sync.Mutex
 
 // Task ...
 type Task struct {
 	command string
-	conn net.Conn
+	conn    net.Conn
 }
 
 func worker(tasks <-chan Task) {
-    for t := range tasks {
-        parseAndAnswer(t.command, t.conn)
-    }
+	for t := range tasks {
+		parseAndAnswer(t.command, t.conn)
+	}
 }
+
 var tasks chan Task
 
 func main() {
 	tasks = make(chan Task, 100)
-	for i:=0; i<4; i++ {
+	for i := 0; i < 4; i++ {
 		go worker(tasks)
 	}
 	go listenTCP()
@@ -37,7 +44,7 @@ func handlerHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("{\n"))
 	dbMtx.Lock()
 	for key, v := range database {
-		fmt.Fprintf(w, "  \"%s\" : \"%s\"\n", key, v)
+		fmt.Fprintf(w, "  \"%s\" : \"%s\"\n", key, v.value)
 	}
 	dbMtx.Unlock()
 	w.Write([]byte("}\n"))
@@ -68,9 +75,9 @@ func connHandler(conn net.Conn) {
 			break
 		}
 		str = str[:len(str)-1]
-		tasks <- Task{str,conn}
+		tasks <- Task{str, conn}
 		fmt.Printf("%s\n", str)
-		
+
 	}
 }
 
@@ -84,15 +91,18 @@ func parseAndAnswer(in string, conn net.Conn) {
 
 	if strings.Compare(strs[command], "INSERT") == 0 {
 		dbMtx.Lock()
-		database[strs[key]] = strs[value]
+		database[strs[key]] = Value{
+			strs[value],
+			time.Now().Add(time.Duration(1000)),
+		}
 		dbMtx.Unlock()
-		write("OK",conn)
+		write("OK", conn)
 		return
 	}
 }
 
 func write(s string, conn net.Conn) {
-	_, errW := conn.Write([]byte(s+"\n"))
+	_, errW := conn.Write([]byte(s + "\n"))
 	if errW != nil {
 		fmt.Println("cant write, close")
 		conn.Close()
