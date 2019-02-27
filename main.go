@@ -1,29 +1,49 @@
 package main
 
-import (
-	"bufio"
-	"fmt"
-	"net"
-	"net/http"
-	"strings"
-)
+import "bufio"
+import "fmt"
+import "net"
+import "net/http"
+import "strings"
+import "sync"
+
+var database = make(map[string]string)
+var dbMtx sync.Mutex
+
+// Task ...
+type Task struct {
+	command string
+	conn net.Conn
+}
+
+func worker(tasks <-chan Task) {
+    for t := range tasks {
+        parseAndAnswer(t.command, t.conn)
+    }
+}
+var tasks chan Task
 
 func main() {
-	go listen()
-	http.HandleFunc("/", httpHandler)
+	tasks = make(chan Task, 100)
+	for i:=0; i<4; i++ {
+		go worker(tasks)
+	}
+	go listenTCP()
+	http.HandleFunc("/", handlerHTTP)
 	http.ListenAndServe(":8080", nil)
 }
 
-var db = make(map[string]string)
-
-func httpHandler(w http.ResponseWriter, r *http.Request) {
+func handlerHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("{\n"))
-	for key, v := range db {
+	dbMtx.Lock()
+	for key, v := range database {
 		fmt.Fprintf(w, "  \"%s\" : \"%s\"\n", key, v)
 	}
+	dbMtx.Unlock()
 	w.Write([]byte("}\n"))
 }
-func listen() {
+
+func listenTCP() {
 	listener, _ := net.Listen("tcp", ":5000")
 
 	for {
@@ -34,28 +54,28 @@ func listen() {
 			continue
 		}
 		fmt.Println("connect")
-		go server(conn)
+		go connHandler(conn)
 	}
 }
-func server(conn net.Conn) {
+
+func connHandler(conn net.Conn) {
 	defer conn.Close()
 	for {
 		in := bufio.NewReader(conn)
-		str, err := in.ReadString('\r')
-		if err != nil {
-			fmt.Println("close")
+		str, errR := in.ReadString('\r')
+		if errR != nil {
+			fmt.Println("cant read, close")
 			break
 		}
 		str = str[:len(str)-1]
-		go parser(str)
-		fmt.Printf("%sn", str)
-		conn.Write([]byte("OK " + str + "\n"))
+		tasks <- Task{str,conn}
+		fmt.Printf("%s\n", str)
+		
 	}
 }
 
-
-func parser(in string) {
-	strs := strings.Split(in," ")
+func parseAndAnswer(in string, conn net.Conn) {
+	strs := strings.Split(in, " ")
 	const (
 		command = iota
 		key
@@ -63,7 +83,18 @@ func parser(in string) {
 	)
 
 	if strings.Compare(strs[command], "INSERT") == 0 {
-		db[strs[key]] = strs[value]
+		dbMtx.Lock()
+		database[strs[key]] = strs[value]
+		dbMtx.Unlock()
+		write("OK",conn)
 		return
+	}
+}
+
+func write(s string, conn net.Conn) {
+	_, errW := conn.Write([]byte(s+"\n"))
+	if errW != nil {
+		fmt.Println("cant write, close")
+		conn.Close()
 	}
 }
