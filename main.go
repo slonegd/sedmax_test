@@ -9,22 +9,22 @@ import "flag"
 var database *Database
 
 func main() {
-	taskQty := *flag.Int("task", 100, "max task for database changes")
-	workersQty := *flag.Int("worker", 4, "max workers for database changes")
-	HTTPport := *flag.Int("http", 8080, "port for http")
-	TCPport := *flag.Int("tcp", 5000, "port for tcp")
-	// livingTime := *flag.Int("time", 5, "living time for keys in second")
+	taskQty := flag.Int("task", 100, "max task for database changes")
+	workersQty := flag.Int("worker", 4, "max workers for database changes")
+	HTTPport := flag.Int("http", 8080, "port for http")
+	TCPport := flag.Int("tcp", 5000, "port for tcp")
+	livingTime := flag.Int("time", 60, "living time for keys in second")
 	flag.Parse()
 
-	database = MakeDatabase(taskQty, workersQty)
+	database = MakeDatabase(*taskQty, *workersQty, *livingTime)
 
-	go listenTCP(TCPport)
+	go listenTCP(*TCPport)
 	http.HandleFunc("/", handlerHTTP)
-	http.ListenAndServe(fmt.Sprintf(":%d", HTTPport), nil)
+	http.ListenAndServe(fmt.Sprintf(":%d", *HTTPport), nil)
 }
 
 func handlerHTTP(w http.ResponseWriter, r *http.Request) {
-	database.HTTP(w)
+	database.HTTPresponse(w)
 }
 
 func listenTCP(port int) {

@@ -17,13 +17,15 @@ type Value struct {
 type Database struct {
 	sync.Mutex
 	values map[string]Value
+	livingTime time.Duration
 	tasks  chan task
 }
 
 // MakeDatabase ...
-func MakeDatabase(taskQty, workersQty int) (p *Database) {
+func MakeDatabase(taskQty, workersQty, livingTime int) (p *Database) {
 	p = &Database{
 		values: make(map[string]Value),
+		livingTime : time.Duration(livingTime*1000000000), // in seconds
 		tasks:  make(chan task, taskQty),
 	}
 	for i := 0; i < workersQty; i++ {
@@ -32,7 +34,6 @@ func MakeDatabase(taskQty, workersQty int) (p *Database) {
 	return
 }
 
-// Task ...
 type task struct {
 	command string
 	conn    net.Conn
@@ -44,15 +45,25 @@ func worker(tasks <-chan task, d *Database) {
 	}
 }
 
-// HTTP ...
-func (d *Database) HTTP(w http.ResponseWriter) {
-	w.Write([]byte("{\n"))
+// HTTPresponse ...
+func (d *Database) HTTPresponse(w http.ResponseWriter) {
+	now := time.Now()
+	w.Write([]byte("{"))
+	notFirst := false
 	d.Lock()
 	for key, v := range d.values {
-		fmt.Fprintf(w, "  \"%s\" : \"%s\"\n", key, v.value)
+		if v.elapsed.After(now) {
+			if notFirst {
+				fmt.Fprintf(w, ",")
+			}
+			fmt.Fprintf(w, "\n  \"%s\" : \"%s\"", key, v.value)
+			notFirst = true
+		} else {
+			delete(d.values, key)
+		}
 	}
 	d.Unlock()
-	w.Write([]byte("}\n"))
+	w.Write([]byte("\n}\n"))
 }
 
 // AddTask ...
@@ -68,14 +79,70 @@ func (d *Database) parseAndAnswer(t task) {
 		value
 	)
 
-	if strings.Compare(strs[command], "INSERT") == 0 {
-		d.Lock()
-		d.values[strs[key]] = Value{
-			strs[value],
-			time.Now().Add(time.Duration(1000)),
-		}
-		d.Unlock()
-		write("OK", t.conn)
+	if strings.Compare(strs[command], "INSERT") == 0 && len(strs) == 3 {
+		d.addValue(strs[key], strs[value], t.conn)
 		return
 	}
+
+	if strings.Compare(strs[command], "GET") == 0 && len(strs) == 2 {
+		d.getValue(strs[key], t.conn)
+		return
+	}
+
+	if strings.Compare(strs[command], "DELETE") == 0 && len(strs) == 2 {
+		d.deleteValue(strs[key], t.conn)
+		return
+	}
+}
+
+func (d *Database) addValue(key, value string, conn net.Conn) {
+	d.Lock()
+	defer d.Unlock()
+	v, exist := d.values[key]
+	switch {
+	case !exist:
+		d.values[key] = Value{
+			value,
+			time.Now().Add(d.livingTime),
+		}
+		write("OK", conn)
+	case v.value != value:
+		d.values[key] = Value{
+			value,
+			time.Now().Add(d.livingTime),
+		}
+		write("OK", conn)
+	}
+	return
+}
+
+func (d *Database) getValue(key string, conn net.Conn) {
+	now := time.Now()
+	d.Lock()
+	defer d.Unlock()
+	v, exist := d.values[key]
+	if exist && v.elapsed.After(now) {
+		write(v.value, conn)
+	} else {
+		write("ERR", conn)
+	}
+	return
+}
+
+func (d *Database) deleteValue(key string, conn net.Conn) {
+	now := time.Now()
+	d.Lock()
+	defer d.Unlock()
+	v, exist := d.values[key]
+	if exist {
+		if v.elapsed.After(now) {
+			write("OK", conn)
+		} else {
+			write("ERR", conn)
+		}
+		delete(d.values, key)
+	} else {
+		write("ERR", conn)
+	}
+	return
 }
