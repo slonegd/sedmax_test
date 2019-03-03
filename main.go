@@ -6,8 +6,6 @@ import "net"
 import "net/http"
 import "flag"
 
-var database *Database
-
 func main() {
 	taskQty := flag.Int("task", 100, "max task for database changes")
 	workersQty := flag.Int("worker", 4, "max workers for database changes")
@@ -16,52 +14,45 @@ func main() {
 	livingTime := flag.Int("time", 60, "living time for keys in second")
 	flag.Parse()
 
-	database = MakeDatabase(*taskQty, *workersQty, *livingTime)
+	database := MakeDatabase(*taskQty, *workersQty, *livingTime)
 
-	go listenTCP(*TCPport)
-	http.HandleFunc("/", handlerHTTP)
+	go listenTCP(*TCPport, database)
+	http.HandleFunc("/", database.HTTPresponse)
 	http.ListenAndServe(fmt.Sprintf(":%d", *HTTPport), nil)
 }
 
-func handlerHTTP(w http.ResponseWriter, r *http.Request) {
-	database.HTTPresponse(w)
-}
-
-func listenTCP(port int) {
+func listenTCP(port int, database *Database) {
 	listener, _ := net.Listen("tcp", fmt.Sprintf(":%d", port))
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			fmt.Println("cant connect")
 			conn.Close()
 			continue
 		}
-		fmt.Println("connect")
-		go connHandler(conn)
+		go handlerTCP(conn, database)
 	}
 }
 
-func connHandler(conn net.Conn) {
+func handlerTCP(conn net.Conn, database *Database) {
 	defer conn.Close()
 	for {
 		in := bufio.NewReader(conn)
-		str, errR := in.ReadString('\r')
+		str, errR := in.ReadString('\n')
 		if errR != nil {
-			fmt.Println("cant read, close")
 			break
 		}
 		str = str[:len(str)-1]
+		if str[len(str)-1] == '\r' {
+			str = str[:len(str)-1]
+		}
 		database.AddTask(str, conn)
-		fmt.Printf("%s\n", str)
-
 	}
 }
 
 func write(s string, conn net.Conn) {
 	_, errW := conn.Write([]byte(s + "\n"))
 	if errW != nil {
-		fmt.Println("cant write, close")
 		conn.Close()
 	}
 }

@@ -46,7 +46,7 @@ func worker(tasks <-chan task, d *Database) {
 }
 
 // HTTPresponse ...
-func (d *Database) HTTPresponse(w http.ResponseWriter) {
+func (d *Database) HTTPresponse(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	w.Write([]byte("{"))
 	notFirst := false
