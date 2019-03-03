@@ -16,17 +16,17 @@ type Value struct {
 // Database ...
 type Database struct {
 	sync.Mutex
-	values map[string]Value
+	values     map[string]Value
 	livingTime time.Duration
-	tasks  chan task
+	tasks      chan task
 }
 
 // MakeDatabase ...
 func MakeDatabase(taskQty, workersQty, livingTime int) (p *Database) {
 	p = &Database{
-		values: make(map[string]Value),
-		livingTime : time.Duration(livingTime*1000000000), // in seconds
-		tasks:  make(chan task, taskQty),
+		values:     make(map[string]Value),
+		livingTime: time.Duration(livingTime * 1000000000), // in seconds
+		tasks:      make(chan task, taskQty),
 	}
 	for i := 0; i < workersQty; i++ {
 		go worker(p.tasks, p)
@@ -68,7 +68,7 @@ func (d *Database) HTTPresponse(w http.ResponseWriter, r *http.Request) {
 
 // AddTask ...
 func (d *Database) AddTask(command string, conn net.Conn) {
-	d.tasks <- task {command, conn}
+	d.tasks <- task{command, conn}
 }
 
 func (d *Database) parseAndAnswer(t task) {

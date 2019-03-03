@@ -54,7 +54,7 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">/home/slonegd/code/go_web/database.go (78.0%)</option>
+				<option value="file0">/home/slonegd/code/go_web/database.go (100.0%)</option>
 				
 				<option value="file1">/home/slonegd/code/go_web/main.go (43.3%)</option>
 				
@@ -88,17 +88,17 @@ type Value struct {
 // Database ...
 type Database struct {
         sync.Mutex
-        values map[string]Value
+        values     map[string]Value
         livingTime time.Duration
-        tasks  chan task
+        tasks      chan task
 }
 
 // MakeDatabase ...
 func MakeDatabase(taskQty, workersQty, livingTime int) (p *Database) <span class="cov8" title="1">{
         p = &amp;Database{
-                values: make(map[string]Value),
-                livingTime : time.Duration(livingTime*1000000000), // in seconds
-                tasks:  make(chan task, taskQty),
+                values:     make(map[string]Value),
+                livingTime: time.Duration(livingTime * 1000000000), // in seconds
+                tasks:      make(chan task, taskQty),
         }
         for i := 0; i &lt; workersQty; i++ </span><span class="cov8" title="1">{
                 go worker(p.tasks, p)
@@ -118,29 +118,29 @@ func worker(tasks &lt;-chan task, d *Database) <span class="cov8" title="1">{
 }
 
 // HTTPresponse ...
-func (d *Database) HTTPresponse(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+func (d *Database) HTTPresponse(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
         now := time.Now()
         w.Write([]byte("{"))
         notFirst := false
         d.Lock()
-        for key, v := range d.values </span><span class="cov0" title="0">{
-                if v.elapsed.After(now) </span><span class="cov0" title="0">{
-                        if notFirst </span><span class="cov0" title="0">{
+        for key, v := range d.values </span><span class="cov8" title="1">{
+                if v.elapsed.After(now) </span><span class="cov8" title="1">{
+                        if notFirst </span><span class="cov8" title="1">{
                                 fmt.Fprintf(w, ",")
                         }</span>
-                        <span class="cov0" title="0">fmt.Fprintf(w, "\n  \"%s\" : \"%s\"", key, v.value)
+                        <span class="cov8" title="1">fmt.Fprintf(w, "\n  \"%s\" : \"%s\"", key, v.value)
                         notFirst = true</span>
-                } else<span class="cov0" title="0"> {
+                } else<span class="cov8" title="1"> {
                         delete(d.values, key)
                 }</span>
         }
-        <span class="cov0" title="0">d.Unlock()
+        <span class="cov8" title="1">d.Unlock()
         w.Write([]byte("\n}\n"))</span>
 }
 
 // AddTask ...
 func (d *Database) AddTask(command string, conn net.Conn) <span class="cov8" title="1">{
-        d.tasks &lt;- task {command, conn}
+        d.tasks &lt;- task{command, conn}
 }</span>
 
 func (d *Database) parseAndAnswer(t task) <span class="cov8" title="1">{
