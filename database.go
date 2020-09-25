@@ -1,11 +1,14 @@
 package main
 
-import "time"
-import "sync"
-import "net"
-import "net/http"
-import "fmt"
-import "strings"
+import (
+	"fmt"
+	"log"
+	"net"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+)
 
 // Value ...
 type Value struct {
@@ -68,6 +71,7 @@ func (d *Database) HTTPresponse(w http.ResponseWriter, r *http.Request) {
 
 // AddTask ...
 func (d *Database) AddTask(command string, conn net.Conn) {
+	log.Println(conn.RemoteAddr(), "got command", command)
 	d.tasks <- task{command, conn}
 }
 

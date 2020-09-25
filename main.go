@@ -1,10 +1,13 @@
 package main
 
-import "bufio"
-import "fmt"
-import "net"
-import "net/http"
-import "flag"
+import (
+	"bufio"
+	"flag"
+	"fmt"
+	"log"
+	"net"
+	"net/http"
+)
 
 func main() {
 	taskQty := flag.Int("task", 100, "max task for database changes")
@@ -51,6 +54,7 @@ func handlerTCP(conn net.Conn, database *Database) {
 }
 
 func write(s string, conn net.Conn) {
+	log.Println(conn.RemoteAddr(), "result", s)
 	_, errW := conn.Write([]byte(s + "\n"))
 	if errW != nil {
 		conn.Close()
